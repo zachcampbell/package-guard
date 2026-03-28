@@ -133,6 +133,26 @@ if echo "$COMMAND_STRIPPED" | grep -qE '\bcargo\s+add\b'; then
     done < <(echo "$COMMAND" | sed -n 's/.*cargo add //p' | tr ' ' '\n')
 fi
 
+# go get / go install
+if echo "$COMMAND_STRIPPED" | grep -qE '\bgo\s+(get|install)\b'; then
+    ECOSYSTEM="go"
+    while IFS= read -r token; do
+        [[ "$token" == -* ]] && continue
+        [[ "$token" == "go" || "$token" == "get" || "$token" == "install" ]] && continue
+        [[ -z "$token" ]] && continue
+        # Go modules look like github.com/user/repo or golang.org/x/pkg
+        # Strip @version suffix for the package name, keep version separate
+        local_pkg="$token"
+        local_ver=""
+        if [[ "$token" == *"@"* ]]; then
+            local_pkg="${token%%@*}"
+            local_ver="${token#*@}"
+        fi
+        PACKAGES+=("$local_pkg${local_ver:+@$local_ver}")
+        break  # go get/install typically takes one module
+    done < <(echo "$COMMAND" | sed -n 's/.*go \(get\|install\) //p' | sed 's/[;&|].*//' | tr ' ' '\n')
+fi
+
 # Not a package install command — allow
 [[ -z "$ECOSYSTEM" ]] && exit 0
 

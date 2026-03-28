@@ -128,5 +128,19 @@ PASS|npm run build
 PASS|yarn install
 PASS|pnpm install
 
+# ── go variants ──────────────────────────────────────────────────────────────
+BLOCK|go get github.com/evil/malware
+BLOCK|go get github.com/evil/malware@latest
+BLOCK|go get github.com/evil/malware@v1.0.0
+BLOCK|go install github.com/evil/malware@latest
+BLOCK|go install github.com/evil/tool/cmd/thing@v2.0.0
+
+# go build / go test / go mod tidy — should NOT block (uses existing deps)
+PASS|go build ./...
+PASS|go test ./...
+PASS|go mod tidy
+PASS|go mod download
+PASS|go run main.go
+
 # ── cargo variants ───────────────────────────────────────────────────────────
 BLOCK|cargo add malicious-crate

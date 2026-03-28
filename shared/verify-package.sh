@@ -259,6 +259,73 @@ print(int(t.timestamp()))
     fi
 }
 
+# ── Recency Check (Go modules) ───────────────────────────────────────────────
+
+check_recency_go() {
+    [[ "$SKIP_RECENCY" == "1" ]] && return 0
+
+    # Go module paths use slashes — need to be URL-encoded for the proxy
+    # e.g., github.com/user/repo -> github.com/user/repo
+    local module="$PACKAGE"
+
+    # If no version specified, get the latest
+    local ver="$VERSION"
+    if [[ -z "$ver" ]]; then
+        local latest_url="https://proxy.golang.org/${module}/@latest"
+        local latest_resp
+        latest_resp=$(curl -sf --max-time 10 "$latest_url" 2>/dev/null) || {
+            warn_or_die "Could not fetch Go module info for $module"
+            return 0
+        }
+        ver=$(echo "$latest_resp" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+print(data.get('Version', ''))
+" 2>/dev/null)
+    fi
+
+    if [[ -z "$ver" ]]; then
+        warn_or_die "Could not determine version for Go module $module"
+        return 0
+    fi
+
+    # Get version info with timestamp
+    local info_url="https://proxy.golang.org/${module}/@v/${ver}.info"
+    local info_resp
+    info_resp=$(curl -sf --max-time 10 "$info_url" 2>/dev/null) || {
+        warn_or_die "Could not fetch version info for $module@$ver"
+        return 0
+    }
+
+    local publish_time
+    publish_time=$(echo "$info_resp" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+print(data.get('Time', ''))
+" 2>/dev/null)
+
+    if [[ -z "$publish_time" ]]; then
+        warn_or_die "Could not determine publish time for $module@$ver"
+        return 0
+    fi
+
+    local publish_epoch now_epoch age_hours
+    publish_epoch=$(python3 -c "
+from datetime import datetime, timezone
+t = datetime.fromisoformat('$publish_time'.replace('Z', '+00:00'))
+print(int(t.timestamp()))
+" 2>/dev/null) || return 0
+
+    now_epoch=$(date +%s)
+    age_hours=$(( (now_epoch - publish_epoch) / 3600 ))
+
+    if [[ "$age_hours" -lt "$MAX_AGE_HOURS" ]]; then
+        die "Go module $module@$ver was published ${age_hours}h ago (threshold: ${MAX_AGE_HOURS}h). Recently published modules require manual review."
+    else
+        info "Go module $module@$ver published ${age_hours}h ago (OK)"
+    fi
+}
+
 # ── Content Scan (PyPI) ─────────────────────────────────────────────────────
 
 check_content_pypi() {
@@ -351,6 +418,9 @@ case "$ECOSYSTEM" in
         check_recency_npm
         # npm content scan not implemented yet — packages are tarballs
         # with different structure. Could add later.
+        ;;
+    go|golang)
+        check_recency_go
         ;;
     cargo|rust)
         # crates.io API is similar, could add recency check
