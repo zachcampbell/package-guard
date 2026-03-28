@@ -1,0 +1,19 @@
+{
+  "features": {
+    "codex_hooks": true
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/package-verify/codex-hook.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
