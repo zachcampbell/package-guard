@@ -47,13 +47,17 @@ COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 
 [[ -z "$COMMAND" ]] && exit 0
 
+# Strip quoted strings so we don't match package names inside commit messages,
+# echo statements, heredocs, etc.
+COMMAND_STRIPPED=$(echo "$COMMAND" | sed "s/'[^']*'//g; s/\"[^\"]*\"//g")
+
 # ── Detect package install commands ──────────────────────────────────────────
 
 ECOSYSTEM=""
 PACKAGES=()
 
 # pip install — matches all invocation styles
-if echo "$COMMAND" | grep -qE 'pip3?\s+install\b|python[0-9.]* -m pip install\b'; then
+if echo "$COMMAND_STRIPPED" | grep -qE 'pip3?\s+install\b|python[0-9.]* -m pip install\b'; then
     ECOSYSTEM="pip"
     raw_args=""
     raw_args=$(echo "$COMMAND" | sed -n 's/.*pip[3]\{0,1\} install //p' | sed 's/[;&|].*//')
@@ -77,7 +81,7 @@ if echo "$COMMAND" | grep -qE 'pip3?\s+install\b|python[0-9.]* -m pip install\b'
 fi
 
 # npm install
-if echo "$COMMAND" | grep -qE '\bnpm\s+install\b|\bnpm\s+i\b'; then
+if echo "$COMMAND_STRIPPED" | grep -qE '\bnpm\s+install\b|\bnpm\s+i\b'; then
     ECOSYSTEM="npm"
     while IFS= read -r token; do
         [[ "$token" == -* ]] && continue
@@ -87,8 +91,31 @@ if echo "$COMMAND" | grep -qE '\bnpm\s+install\b|\bnpm\s+i\b'; then
     done < <(echo "$COMMAND" | sed -n 's/.*npm \(install\|i\) //p' | tr ' ' '\n')
 fi
 
+# npx <package>
+if echo "$COMMAND_STRIPPED" | grep -qE '\bnpx\s+'; then
+    ECOSYSTEM="npm"
+    while IFS= read -r token; do
+        [[ "$token" == -* ]] && continue
+        [[ "$token" == "npx" ]] && continue
+        [[ -z "$token" ]] && continue
+        PACKAGES+=("$token")
+        break
+    done < <(echo "$COMMAND" | sed -n 's/.*npx //p' | sed 's/[;&|].*//' | tr ' ' '\n')
+fi
+
+# yarn add / pnpm add / bun add
+if echo "$COMMAND_STRIPPED" | grep -qE '\b(yarn|pnpm|bun)\s+add\b'; then
+    ECOSYSTEM="npm"
+    while IFS= read -r token; do
+        [[ "$token" == -* ]] && continue
+        [[ "$token" == "add" || "$token" == "yarn" || "$token" == "pnpm" || "$token" == "bun" ]] && continue
+        [[ -z "$token" ]] && continue
+        PACKAGES+=("$token")
+    done < <(echo "$COMMAND" | sed -n 's/.*\(yarn\|pnpm\|bun\) add //p' | sed 's/[;&|].*//' | tr ' ' '\n')
+fi
+
 # cargo add
-if echo "$COMMAND" | grep -qE '\bcargo\s+add\b'; then
+if echo "$COMMAND_STRIPPED" | grep -qE '\bcargo\s+add\b'; then
     ECOSYSTEM="cargo"
     while IFS= read -r token; do
         [[ "$token" == -* ]] && continue

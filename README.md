@@ -11,7 +11,7 @@ package-guard intercepts package installs before they execute, checks them again
 Every `pip install` command — whether from an AI tool, a terminal, a venv, or `python -m pip` — gets intercepted and verified:
 
 - **Allowlist**: Is this package approved? (`STRICT=1` blocks everything not on the list)
-- **Recency**: Was this version published in the last 48 hours? (Most supply chain attacks are caught within hours)
+- **Recency**: Was this version published in the last 14 days? (Most supply chain attacks are caught within days)
 - **Content scan**: Does the package source contain suspicious patterns? (`b64decode` + `exec`, `wave.open` + `readframes`, etc.)
 - **Source blocking**: `-r requirements.txt`, local wheels, `git+https://`, `--index-url`, editable installs — all blocked by default
 
@@ -61,9 +61,9 @@ An optional fourth layer: deploy a [Nexus CE](https://help.sonatype.com/en/sonat
 Everything lives in `policy.conf` inside the install directory:
 
 ```ini
-STRICT=1          # Block packages not on the allowlist
+STRICT=0          # Recency is primary defense; set to 1 for allowlist enforcement
 FAIL_CLOSED=1     # Block if verification can't complete (network errors, etc.)
-MAX_AGE_HOURS=48  # Flag packages published within this window
+MAX_AGE_HOURS=336 # Flag packages published within 14 days
 SKIP_RECENCY=0    # Don't skip the recency check
 SKIP_CONTENT=0    # Don't skip the content scan
 ```
@@ -97,7 +97,7 @@ To unblock a package, add it to the allowlist. To unblock `-r` or `-e`, use the 
 
 ## Ecosystem coverage
 
-PyPI has full enforcement (allowlist, recency, content scan, source blocking). npm gets allowlist + recency. Cargo gets allowlist only. For full coverage across all ecosystems, use a network-level package proxy.
+PyPI has full enforcement (allowlist, recency, content scan, source blocking). npm gets allowlist + recency across `npm install`, `npx`, `yarn add`, `pnpm add`, and `bun add`. Cargo gets allowlist only. For full coverage across all ecosystems, use a network-level package proxy.
 
 ## Tested against
 

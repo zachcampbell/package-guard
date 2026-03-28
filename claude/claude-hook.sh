@@ -42,8 +42,12 @@ VERIFY_SCRIPT="/opt/package-verify/verify-package.sh"
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 
-# If no command or not a package install, allow immediately
+# If no command, allow immediately
 [[ -z "$COMMAND" ]] && exit 0
+
+# Strip quoted strings so we don't match package names inside commit messages,
+# echo statements, heredocs, etc. Only match actual commands being executed.
+COMMAND_STRIPPED=$(echo "$COMMAND" | sed "s/'[^']*'//g; s/\"[^\"]*\"//g")
 
 # ── Detect package install commands ──────────────────────────────────────────
 
@@ -54,7 +58,7 @@ PACKAGES=()
 #   pip install X, pip3 install X, python -m pip install X,
 #   .venv/bin/pip install X, /path/to/pip install X,
 #   ENV=val pip install X, cd /tmp && pip install X
-if echo "$COMMAND" | grep -qE 'pip3?\s+install\b|python[0-9.]* -m pip install\b'; then
+if echo "$COMMAND_STRIPPED" | grep -qE 'pip3?\s+install\b|python[0-9.]* -m pip install\b'; then
     ECOSYSTEM="pip"
 
     # Extract everything after "pip install" (or "pip3 install"), stop at shell operators
@@ -84,7 +88,7 @@ if echo "$COMMAND" | grep -qE 'pip3?\s+install\b|python[0-9.]* -m pip install\b'
 fi
 
 # npm install <packages>
-if echo "$COMMAND" | grep -qE '\bnpm\s+install\b|\bnpm\s+i\b'; then
+if echo "$COMMAND_STRIPPED" | grep -qE '\bnpm\s+install\b|\bnpm\s+i\b'; then
     ECOSYSTEM="npm"
     while IFS= read -r token; do
         [[ "$token" == -* ]] && continue
@@ -95,8 +99,31 @@ if echo "$COMMAND" | grep -qE '\bnpm\s+install\b|\bnpm\s+i\b'; then
     done < <(echo "$COMMAND" | sed -n 's/.*npm \(install\|i\) //p' | tr ' ' '\n')
 fi
 
+# npx <package> — downloads and runs without installing
+if echo "$COMMAND_STRIPPED" | grep -qE '\bnpx\s+'; then
+    ECOSYSTEM="npm"
+    while IFS= read -r token; do
+        [[ "$token" == -* ]] && continue
+        [[ "$token" == "npx" ]] && continue
+        [[ -z "$token" ]] && continue
+        PACKAGES+=("$token")
+        break  # npx only runs the first package
+    done < <(echo "$COMMAND" | sed -n 's/.*npx //p' | sed 's/[;&|].*//' | tr ' ' '\n')
+fi
+
+# yarn add / pnpm add / bun add
+if echo "$COMMAND_STRIPPED" | grep -qE '\b(yarn|pnpm|bun)\s+add\b'; then
+    ECOSYSTEM="npm"
+    while IFS= read -r token; do
+        [[ "$token" == -* ]] && continue
+        [[ "$token" == "add" || "$token" == "yarn" || "$token" == "pnpm" || "$token" == "bun" ]] && continue
+        [[ -z "$token" ]] && continue
+        PACKAGES+=("$token")
+    done < <(echo "$COMMAND" | sed -n 's/.*\(yarn\|pnpm\|bun\) add //p' | sed 's/[;&|].*//' | tr ' ' '\n')
+fi
+
 # cargo add <packages>
-if echo "$COMMAND" | grep -qE '\bcargo\s+add\b'; then
+if echo "$COMMAND_STRIPPED" | grep -qE '\bcargo\s+add\b'; then
     ECOSYSTEM="cargo"
     while IFS= read -r token; do
         [[ "$token" == -* ]] && continue

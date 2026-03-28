@@ -83,6 +83,11 @@ PASS|pip show requests
 PASS|pip --version
 PASS|pip3 list
 
+# ── Package names inside quoted strings (should NOT trigger) ─────────────────
+PASS|git commit -m "npm install stuff"
+PASS|echo "pip install requests"
+PASS|git commit -m "added pip install step to docs"
+
 # ── Non-pip commands (pass through) ──────────────────────────────────────────
 PASS|ls -la
 PASS|git status
@@ -103,6 +108,25 @@ BLOCK|npm install malicious-pkg
 BLOCK|npm i malicious-pkg
 BLOCK|npm install --save malicious-pkg
 BLOCK|npm install --save-dev malicious-pkg
+
+# ── npx (downloads and runs without installing) ─────────────────────────────
+BLOCK|npx malicious-pkg
+BLOCK|npx create-malicious-app my-project
+BLOCK|npx --yes malicious-pkg
+
+# ── yarn / pnpm / bun ───────────────────────────────────────────────────────
+BLOCK|yarn add malicious-pkg
+BLOCK|yarn add --dev malicious-pkg
+BLOCK|pnpm add malicious-pkg
+BLOCK|pnpm add -D malicious-pkg
+BLOCK|bun add malicious-pkg
+
+# ── npm passthrough (bare install from package.json — should NOT block) ──────
+PASS|npm install
+PASS|npm ci
+PASS|npm run build
+PASS|yarn install
+PASS|pnpm install
 
 # ── cargo variants ───────────────────────────────────────────────────────────
 BLOCK|cargo add malicious-crate
