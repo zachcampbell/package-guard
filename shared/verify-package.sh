@@ -326,6 +326,73 @@ print(int(t.timestamp()))
     fi
 }
 
+# ── Recency Check (Cargo/crates.io) ──────────────────────────────────────────
+
+check_recency_cargo() {
+    [[ "$SKIP_RECENCY" == "1" ]] && return 0
+
+    local crate="$PACKAGE"
+    # crates.io requires a User-Agent header
+    local url="https://crates.io/api/v1/crates/${crate}"
+    local response
+    response=$(curl -sf --max-time 10 -H "User-Agent: package-guard" "$url" 2>/dev/null) || {
+        warn_or_die "Could not fetch crates.io metadata for $crate"
+        return 0
+    }
+
+    local ver="$VERSION"
+    local publish_time
+
+    if [[ -n "$ver" ]]; then
+        # Specific version requested
+        publish_time=$(echo "$response" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for v in data.get('versions', []):
+    if v['num'] == '$ver':
+        print(v.get('created_at', ''))
+        break
+" 2>/dev/null)
+    else
+        # Latest version
+        publish_time=$(echo "$response" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+versions = data.get('versions', [])
+if versions:
+    print(versions[0].get('created_at', ''))
+" 2>/dev/null)
+        ver=$(echo "$response" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+versions = data.get('versions', [])
+if versions:
+    print(versions[0].get('num', ''))
+" 2>/dev/null)
+    fi
+
+    if [[ -z "$publish_time" ]]; then
+        warn_or_die "Could not determine publish time for $crate${ver:+ $ver}"
+        return 0
+    fi
+
+    local publish_epoch now_epoch age_hours
+    publish_epoch=$(python3 -c "
+from datetime import datetime, timezone
+t = datetime.fromisoformat('$publish_time'.replace('Z', '+00:00'))
+print(int(t.timestamp()))
+" 2>/dev/null) || return 0
+
+    now_epoch=$(date +%s)
+    age_hours=$(( (now_epoch - publish_epoch) / 3600 ))
+
+    if [[ "$age_hours" -lt "$MAX_AGE_HOURS" ]]; then
+        die "Crate $crate${ver:+ $ver} was published ${age_hours}h ago (threshold: ${MAX_AGE_HOURS}h). Recently published crates require manual review."
+    else
+        info "Crate $crate${ver:+ $ver} published ${age_hours}h ago (OK)"
+    fi
+}
+
 # ── Content Scan (PyPI) ─────────────────────────────────────────────────────
 
 check_content_pypi() {
@@ -423,8 +490,7 @@ case "$ECOSYSTEM" in
         check_recency_go
         ;;
     cargo|rust)
-        # crates.io API is similar, could add recency check
-        warn "Cargo verification not yet implemented"
+        check_recency_cargo
         ;;
     *)
         warn "Unknown ecosystem: $ECOSYSTEM"

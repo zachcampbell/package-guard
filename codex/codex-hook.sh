@@ -101,15 +101,15 @@ if echo "$COMMAND_STRIPPED" | grep -qE '\b(yarn|pnpm|bun)\s+add\b'; then
     done < <(echo "$COMMAND" | sed -n 's/.*\(yarn\|pnpm\|bun\) add //p' | sed 's/[;&|].*//' | tr ' ' '\n')
 fi
 
-# cargo add
-if echo "$COMMAND_STRIPPED" | grep -qE '\bcargo\s+add\b'; then
+# cargo add / cargo install
+if echo "$COMMAND_STRIPPED" | grep -qE '\bcargo\s+(add|install)\b'; then
     ECOSYSTEM="cargo"
     while IFS= read -r token; do
         [[ "$token" == -* ]] && continue
-        [[ "$token" == "cargo" || "$token" == "add" ]] && continue
+        [[ "$token" == "cargo" || "$token" == "add" || "$token" == "install" ]] && continue
         [[ -z "$token" ]] && continue
         PACKAGES+=("$token")
-    done < <(echo "$COMMAND" | sed -n 's/.*cargo add //p' | tr ' ' '\n')
+    done < <(echo "$COMMAND" | sed -n 's/.*cargo \(add\|install\) //p' | sed 's/[;&|].*//' | tr ' ' '\n')
 fi
 
 # go get / go install

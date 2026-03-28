@@ -144,3 +144,13 @@ PASS|go run main.go
 
 # ── cargo variants ───────────────────────────────────────────────────────────
 BLOCK|cargo add malicious-crate
+BLOCK|cargo add malicious-crate@1.0.0
+BLOCK|cargo install malicious-tool
+BLOCK|cargo install malicious-tool --version 1.0.0
+
+# cargo build / test / run — should NOT block
+PASS|cargo build
+PASS|cargo build --release
+PASS|cargo test
+PASS|cargo run
+PASS|cargo clippy
